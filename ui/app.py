@@ -1,10 +1,18 @@
 import tkinter as tk
+import re
 from tkinter import ttk, filedialog
 
 
 class SpeedReaderApp(tk.Tk):
     def __init__(self):
         super().__init__()
+
+        # Linking the Shortcut keys
+        self.bind("<space>", lambda e: self.toggle_reading())
+        self.bind("<Up>", lambda e: self.increase_speed())
+        self.bind("<Down>", lambda e: self.decrease_speed())
+        self.bind("<Control-o>", lambda e: self.browse_file())
+        self.bind("<Left>", lambda e: self.rewind())
 
         self.COLORS = {
             "bg": "#121212",
@@ -51,13 +59,23 @@ class SpeedReaderApp(tk.Tk):
             height=4,
             bg=self.COLORS["surface"],
             fg=self.COLORS["text"],
-            insertbackground=self.COLORS["accent"],
+            insertbackground=self.COLORS["orp"],
             font=("Consolas", 12),
             padx=10,
             pady=10,
             relief="flat",
         )
         self.text_field.pack(fill="x", pady=10)
+
+        self.wpm_label = ttk.Label(
+            self.main_frame,
+            text=f"WPM: {self.wpm}",
+            background=self.COLORS["bg"],
+            foreground=self.COLORS["orp"],
+            font=("Helvetica", 12, "bold"),
+            justify="right",
+        )
+        self.wpm_label.pack(pady=(0, 20))
 
         # --- THE FIX: SHARED GRID SYSTEM ---
         self.display_container = ttk.Frame(self.main_frame)
@@ -110,6 +128,18 @@ class SpeedReaderApp(tk.Tk):
         )
         self.browse_btn.pack(side="left", expand=True, fill="x", padx=5)
 
+        self.increase_btn = ttk.Button(
+            self.btn_frame, text="SPEED +", command=self.increase_speed
+        )
+        self.increase_btn.pack(side="left", expand=True, fill="x", padx=5)
+        self.decrease_btn = ttk.Button(
+            self.btn_frame, text="SPEED -", command=self.decrease_speed
+        )
+        self.decrease_btn.pack(side="left", expand=True, fill="x", padx=5)
+
+        self.rewind_btn = ttk.Button(self.btn_frame, text="REWIND", command=self.rewind)
+        self.rewind_btn.pack(side="left", expand=True, fill="x", padx=5)
+
     def _setup_styles(self):
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -129,16 +159,23 @@ class SpeedReaderApp(tk.Tk):
             word = self.words[self.current_index]
 
             # ORP Calculation: Middle of the word
-            if (len(word) <= 2):
+            if len(word) <= 2:
                 mid = 0
             else:
                 mid = len(word) // 2
-                self.left_part.configure(text=word[:mid])
-                self.mid_part.configure(text=word[mid])
-                self.right_part.configure(text=word[mid + 1:])
+
+            self.left_part.configure(text=word[:mid])
+            self.mid_part.configure(text=word[mid])
+            self.right_part.configure(text=word[mid + 1 :])
 
             self.current_index += 1
-            self.after(int(60000 / self.wpm), self.flash_word)
+            delay = int(60000 / self.wpm)
+            if word.endswith(","):
+                delay += 100
+            elif word.endswith((".", "!", "?")):
+                delay += 200
+            self.after(delay, self.flash_word)
+
         elif self.current_index >= len(self.words):
             self.is_running = False
             self.start_btn.configure(text="RESTART")
@@ -154,16 +191,30 @@ class SpeedReaderApp(tk.Tk):
                 self.text_field.insert("1.0", f.read())
 
     def toggle_reading(self):
+        if self.current_index >= len(self.words):
+            self.current_index = 0
+            
         if not self.is_running:
             raw_text = self.text_field.get("1.0", "end-1c").strip()
             if raw_text:
-                self.words = raw_text.split()
+                self.words = re.findall(r'\S+', raw_text)
                 self.is_running = True
                 self.start_btn.configure(text="PAUSE")
                 self.flash_word()
         else:
             self.is_running = False
             self.start_btn.configure(text="RESUME")
+
+    def increase_speed(self):
+        self.wpm = min(1000, self.wpm + 50)
+        self.wpm_label.configure(text=f"WPM: {self.wpm}")
+
+    def decrease_speed(self):
+        self.wpm = max(50, self.wpm - 50)  # Minimum 50 WPM
+        self.wpm_label.configure(text=f"WPM: {self.wpm}")
+
+    def rewind(self):
+        self.current_index = max(0, self.current_index - 20)
 
     def run(self):
         self.mainloop()
