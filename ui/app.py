@@ -1,220 +1,112 @@
 import tkinter as tk
-import re
-from tkinter import ttk, filedialog
+from tkinter import filedialog
+from reader.engine import SpeedReaderEngine
 
 
 class SpeedReaderApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        # Linking the Shortcut keys
         self.bind("<space>", lambda e: self.toggle_reading())
         self.bind("<Up>", lambda e: self.increase_speed())
         self.bind("<Down>", lambda e: self.decrease_speed())
         self.bind("<Control-o>", lambda e: self.browse_file())
         self.bind("<Left>", lambda e: self.rewind())
 
-        self.COLORS = {
-            "bg": "#121212",
-            "surface": "#1e1e1e",
-            "accent": "#00adb5",
-            "orp": "#ff4d4d",
-            "text": "#eeeeee",
-        }
+        self.engine = SpeedReaderEngine()
 
-        self.title("Speed Reader Pro")
-        self._center_window(900, 600)  # Professional centering
-        self.configure(bg=self.COLORS["bg"])
-
-        # State
-        self.words = []
-        self.current_index = 0
-        self.wpm = 300  # Words per minute
+        self.wpm = 300
+        self.target_wpm = 300
         self.is_running = False
 
-        self._setup_styles()
-        self._create_widgets()
+        self._setup_ui()
 
-    def _center_window(self, width, height):
-        """Calculates the screen center and sets geometry."""
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
+    def _setup_ui(self):
+        self.title("Speed Reader Pro")
+        self.geometry("900x600")
 
-        x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (height // 2)
+        self.text_field = tk.Text(self, height=4)
+        self.text_field.pack(fill="x")
 
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.wpm_label = tk.Label(self, text=f"WPM: {self.wpm}")
+        self.wpm_label.pack()
 
-    def _create_widgets(self):
-        self.main_frame = ttk.Frame(self, padding="20")
-        self.main_frame.pack(expand=True, fill="both")
+        self.display = tk.Label(self, text="", font=("Consolas", 40))
+        self.display.pack(expand=True)
 
-        ttk.Label(self.main_frame, text="SPEED READER PRO", style="Header.TLabel").pack(
-            pady=(0, 20)
+        btn_frame = tk.Frame(self)
+        btn_frame.pack()
+
+        tk.Button(btn_frame, text="START", command=self.toggle_reading).pack(
+            side="left"
         )
-
-        # Input Area
-        self.text_field = tk.Text(
-            self.main_frame,
-            height=4,
-            bg=self.COLORS["surface"],
-            fg=self.COLORS["text"],
-            insertbackground=self.COLORS["orp"],
-            font=("Consolas", 12),
-            padx=10,
-            pady=10,
-            relief="flat",
-        )
-        self.text_field.pack(fill="x", pady=10)
-
-        self.wpm_label = ttk.Label(
-            self.main_frame,
-            text=f"WPM: {self.wpm}",
-            background=self.COLORS["bg"],
-            foreground=self.COLORS["orp"],
-            font=("Helvetica", 12, "bold"),
-            justify="right",
-        )
-        self.wpm_label.pack(pady=(0, 20))
-
-        # --- THE FIX: SHARED GRID SYSTEM ---
-        self.display_container = ttk.Frame(self.main_frame)
-        self.display_container.pack(expand=True, fill="x")
-
-        # Force column 0 and 2 to be identical in size (weight=1)
-        self.display_container.columnconfigure(0, weight=1)
-        self.display_container.columnconfigure(1, weight=0)  # Middle stays tight
-        self.display_container.columnconfigure(2, weight=1)
-
-        self.left_part = ttk.Label(
-            self.display_container,
-            text="",
-            style="ORP.TLabel",
-            foreground=self.COLORS["text"],
-            anchor="e",
-        )
-        self.mid_part = ttk.Label(
-            self.display_container,
-            text="",
-            style="ORP.TLabel",
-            foreground=self.COLORS["orp"],
-            anchor="center",
-        )
-        self.right_part = ttk.Label(
-            self.display_container,
-            text="",
-            style="ORP.TLabel",
-            foreground=self.COLORS["text"],
-            anchor="w",
-        )
-
-        # Place them in the grid
-        self.left_part.grid(row=0, column=0, sticky="ew")
-        self.mid_part.grid(row=0, column=1)
-        self.right_part.grid(row=0, column=2, sticky="ew")
-        # ----------------------------------
-
-        # Controls
-        self.btn_frame = ttk.Frame(self.main_frame)
-        self.btn_frame.pack(fill="x", pady=20)
-
-        self.start_btn = ttk.Button(
-            self.btn_frame, text="START", command=self.toggle_reading
-        )
-        self.start_btn.pack(side="left", expand=True, fill="x", padx=5)
-
-        self.browse_btn = ttk.Button(
-            self.btn_frame, text="OPEN FILE", command=self.browse_file
-        )
-        self.browse_btn.pack(side="left", expand=True, fill="x", padx=5)
-
-        self.increase_btn = ttk.Button(
-            self.btn_frame, text="SPEED +", command=self.increase_speed
-        )
-        self.increase_btn.pack(side="left", expand=True, fill="x", padx=5)
-        self.decrease_btn = ttk.Button(
-            self.btn_frame, text="SPEED -", command=self.decrease_speed
-        )
-        self.decrease_btn.pack(side="left", expand=True, fill="x", padx=5)
-
-        self.rewind_btn = ttk.Button(self.btn_frame, text="REWIND", command=self.rewind)
-        self.rewind_btn.pack(side="left", expand=True, fill="x", padx=5)
-
-    def _setup_styles(self):
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        style.configure("TFrame", background=self.COLORS["bg"])
-        style.configure(
-            "Header.TLabel",
-            background=self.COLORS["bg"],
-            foreground=self.COLORS["accent"],
-            font=("Helvetica", 18, "bold"),
-        )
-        style.configure(
-            "ORP.TLabel", background=self.COLORS["bg"], font=("Consolas", 64, "bold")
-        )
-
-    def flash_word(self):
-        if self.is_running and self.current_index < len(self.words):
-            word = self.words[self.current_index]
-
-            # ORP Calculation: Middle of the word
-            if len(word) <= 2:
-                mid = 0
-            else:
-                mid = len(word) // 2
-
-            self.left_part.configure(text=word[:mid])
-            self.mid_part.configure(text=word[mid])
-            self.right_part.configure(text=word[mid + 1 :])
-
-            self.current_index += 1
-            delay = int(60000 / self.wpm)
-            if word.endswith(","):
-                delay += 100
-            elif word.endswith((".", "!", "?")):
-                delay += 200
-            self.after(delay, self.flash_word)
-
-        elif self.current_index >= len(self.words):
-            self.is_running = False
-            self.start_btn.configure(text="RESTART")
-            self.current_index = 0
+        tk.Button(btn_frame, text="OPEN", command=self.browse_file).pack(side="left")
+        tk.Button(btn_frame, text="REWIND", command=self.rewind).pack(side="left")
+        tk.Button(btn_frame, text="CLEAR", command=self.clear_text).pack(side="left")
 
     def browse_file(self):
-        file_path = filedialog.askopenfilename(
-            filetypes=(("Text Files", "*.txt"), ("All Files", "*.*"))
-        )
-        if file_path:
-            with open(file_path, "r", encoding="utf-8") as f:
+        path = filedialog.askopenfilename()
+        if path:
+            with open(path, "r", encoding="utf-8") as f:
                 self.text_field.delete("1.0", "end")
                 self.text_field.insert("1.0", f.read())
 
     def toggle_reading(self):
-        if self.current_index >= len(self.words):
-            self.current_index = 0
-            
+        if not self.engine.has_words():
+            text = self.text_field.get("1.0", "end").strip()
+            if not text:
+                return
+            self.engine.load_text(text)
+
+        self.is_running = not self.is_running
+
+        if self.is_running:
+            self.flash_word()
+
+    def flash_word(self):
         if not self.is_running:
-            raw_text = self.text_field.get("1.0", "end-1c").strip()
-            if raw_text:
-                self.words = re.findall(r'\S+', raw_text)
-                self.is_running = True
-                self.start_btn.configure(text="PAUSE")
-                self.flash_word()
-        else:
+            return
+
+        if self.engine.is_finished():
             self.is_running = False
-            self.start_btn.configure(text="RESUME")
+            self.engine.reset()
+            return
+
+        word = self.engine.get_next_word()
+
+        # ORP logic
+        if len(word) <= 2:
+            mid = 0
+        else:
+            mid = len(word) // 2
+
+        display_word = word[:mid] + "|" + word[mid] + "|" + word[mid + 1 :]
+        self.display.config(text=display_word)
+
+        # speed ramp
+        if self.wpm < self.target_wpm:
+            self.wpm += 5
+        elif self.wpm > self.target_wpm:
+            self.wpm -= 5
+
+        self.wpm_label.config(text=f"WPM: {self.wpm}")
+
+        delay = self.engine.calculate_delay(word, self.wpm)
+        self.after(delay, self.flash_word)
 
     def increase_speed(self):
-        self.wpm = min(1000, self.wpm + 50)
-        self.wpm_label.configure(text=f"WPM: {self.wpm}")
+        self.target_wpm = min(1000, self.target_wpm + 50)
 
     def decrease_speed(self):
-        self.wpm = max(50, self.wpm - 50)  # Minimum 50 WPM
-        self.wpm_label.configure(text=f"WPM: {self.wpm}")
+        self.target_wpm = max(50, self.target_wpm - 50)
 
     def rewind(self):
-        self.current_index = max(0, self.current_index - 20)
+        self.engine.rewind()
+
+    def clear_text(self):
+        self.text_field.delete("1.0", "end")
+        self.engine.reset()
+        self.display.config(text="")
 
     def run(self):
         self.mainloop()
